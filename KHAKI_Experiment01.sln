@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 15
+VisualStudioVersion = 15.0.28307.136
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "KHAKI_Experiment01", "KHAKI_Experiment01\KHAKI_Experiment01.vcxproj", "{191B9647-2544-42EB-858F-232FCC006BFE}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Debug|x86 = Debug|x86
+		Release|x64 = Release|x64
+		Release|x86 = Release|x86
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{191B9647-2544-42EB-858F-232FCC006BFE}.Debug|x64.ActiveCfg = Debug|x64
+		{191B9647-2544-42EB-858F-232FCC006BFE}.Debug|x64.Build.0 = Debug|x64
+		{191B9647-2544-42EB-858F-232FCC006BFE}.Debug|x86.ActiveCfg = Debug|Win32
+		{191B9647-2544-42EB-858F-232FCC006BFE}.Debug|x86.Build.0 = Debug|Win32
+		{191B9647-2544-42EB-858F-232FCC006BFE}.Release|x64.ActiveCfg = Release|x64
+		{191B9647-2544-42EB-858F-232FCC006BFE}.Release|x64.Build.0 = Release|x64
+		{191B9647-2544-42EB-858F-232FCC006BFE}.Release|x86.ActiveCfg = Release|Win32
+		{191B9647-2544-42EB-858F-232FCC006BFE}.Release|x86.Build.0 = Release|Win32
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {7179446E-6AF8-4C2C-A070-0D0432229928}
+	EndGlobalSection
+EndGlobal
