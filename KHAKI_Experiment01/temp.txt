@@ -1,0 +1,55 @@
+/* 初期設定 */
+	cv::Scalar hsv_min = cv::Scalar( 0, 115, 100);
+	cv::Scalar hsv_max = cv::Scalar(15, 180, 225);
+
+	std::string inputstr;
+	std::cout << "入力とする.aviファイル（絶対パス）：";
+	std::cin >> inputstr;
+	std::string inputFilePass = "data/resource/" + inputstr;
+	// 入力となる動画ファイルを入力
+	cv::VideoCapture video(inputFilePass);
+	if (!video.isOpened()) {
+		// 入力ファイルの読み込みに失敗した場合
+		std::cout << "入力ファイルの読み込みに失敗しました．" << std::endl;
+		return -1;
+	}
+
+	/* 入力ファイルのプロパティ */
+	const int Width = video.get(CV_CAP_PROP_FRAME_WIDTH);		// 幅
+	const int Heignt = video.get(CV_CAP_PROP_FRAME_HEIGHT);		// 高さ
+	const int frameCount = video.get(CV_CAP_PROP_FRAME_COUNT);	// 総フレーム数
+
+	std::string inputLog;
+	std::cout << "出力ログのファイル名：";
+	std::cin >> inputLog;
+	std::string filename = "data/result/" + inputLog;
+	std::ofstream writing_file;
+	writing_file.open(filename, std::ios::out);
+	writing_file << "従来手法の総ピクセル数,提案手法の総ピクセル数,従来手法の総ピクセル数-提案手法の総ピクセル数" << std::endl;
+	std::cout << "writing " << filename << "..." << std::endl;
+
+	const int digit = getDigit(frameCount);
+	/* 入力ファイルの総フレーム数だけ探索を繰り返す */
+	for (unsigned int i = 0; i < frameCount; i++) {
+		cv::Mat frame, oldMethodImage, newMethodImage;
+		video >> frame;	// 入力ファイルからフレーム画像を取得
+		handExtractor(frame, oldMethodImage, hsv_min, hsv_max);	// 従来手法による手指領域の抽出
+		int oldMethodZeroPixel = cv::countNonZero(oldMethodImage);
+		newHandExtractor(frame, newMethodImage, hsv_min, hsv_max);	// 提案手法による手指領域の抽出
+		int newMethodZeroPixel = cv::countNonZero(newMethodImage);
+
+		writing_file << oldMethodZeroPixel << "," << newMethodZeroPixel << "," << oldMethodZeroPixel - newMethodZeroPixel << std::endl;	// csvファイルに結果を出力する，
+
+		std::ostringstream ss;
+		ss << std::setw(digit) << std::setfill('0') << i;
+		std::string num(ss.str());
+
+		std::string imgOrg = "data/result/images/image" + num + "(Org).png";
+		cv::imwrite(imgOrg, frame);
+		std::string imgOldMethod = "data/result/images/image" + num + "(OldMethod).png";
+		cv::imwrite(imgOldMethod, oldMethodImage);
+		std::string imgNewMethod = "data/result/images/image" + num + "(NewMethod).png";
+		cv::imwrite(imgNewMethod, newMethodImage);
+	}
+
+	return 0;

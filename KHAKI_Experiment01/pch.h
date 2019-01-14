@@ -23,6 +23,9 @@
 #include <time.h>
 #include <iostream>
 #include <fstream>
+#include <iomanip>
+#include <string>
+#include <sstream>
 
 /* OpenCV関連 */
 #include "opencv2/core.hpp"

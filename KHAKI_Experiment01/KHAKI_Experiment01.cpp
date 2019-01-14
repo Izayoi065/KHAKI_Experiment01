@@ -6,11 +6,13 @@
 /* プロトタイプ宣言 */
 void handExtractor(cv::InputArray inImage_, cv::OutputArray outImage_, cv::Scalar hsv_min, cv::Scalar hsv_max);
 void newHandExtractor(cv::InputArray inImage_, cv::OutputArray outImage_, cv::Scalar hsv_min, cv::Scalar hsv_max);
+void newHandExtractor(cv::InputArray inImage_, cv::OutputArray outImage_, cv::Scalar hsv_min, cv::Scalar hsv_max, double maskSize);
 void shiftDft(cv::Mat &src, cv::Mat &dst);
 void encodeImage(cv::InputArray A_, cv::OutputArray dest_);
 void decodeImage(cv::InputArray A_, cv::OutputArray dest_);
 void genMagImage(cv::InputArray A_, cv::OutputArray dest_);
 void checkMatType(cv::InputArray inImage_);
+unsigned int getDigit(unsigned int num);
 
 int main()
 {
@@ -44,16 +46,19 @@ int main()
 	writing_file << "従来手法の総ピクセル数,提案手法の総ピクセル数,従来手法の総ピクセル数-提案手法の総ピクセル数" << std::endl;
 	std::cout << "writing " << filename << "..." << std::endl;
 
+	const int digit = getDigit(frameCount);
 	/* 入力ファイルの総フレーム数だけ探索を繰り返す */
-	for (unsigned int i = 0; i < frameCount; i++) {
-		cv::Mat frame, oldMethodImage, newMethodImage;
-		video >> frame;	// 入力ファイルからフレーム画像を取得
-		handExtractor(frame, oldMethodImage, hsv_min, hsv_max);	// 従来手法による手指領域の抽出
-		int oldMethodZeroPixel = cv::countNonZero(oldMethodImage);
-		newHandExtractor(frame, newMethodImage, hsv_min, hsv_max);	// 提案手法による手指領域の抽出
-		int newMethodZeroPixel = cv::countNonZero(newMethodImage);
+	cv::Mat cvFImg;
+	cv::Mat frame = cv::imread("data/resource/RS_002.png");
+	for (int i = 0; i < 300; i++) {
+		newHandExtractor(frame, cvFImg, hsv_min, hsv_max, double(i / 10));	// 提案手法による手指領域の抽出
 
-		writing_file << oldMethodZeroPixel << "," << newMethodZeroPixel << "," << oldMethodZeroPixel - newMethodZeroPixel << std::endl;	// csvファイルに結果を出力する，
+		std::ostringstream ss;
+		ss << std::setw(4) << std::setfill('0') << i;
+		std::string num(ss.str());
+
+		std::string imgNewMethod = "data/result/Fimages/Fimage" + num + "(F_MaskSize).png";
+		cv::imwrite(imgNewMethod, cvFImg);
 	}
 
 	return 0;
@@ -94,7 +99,7 @@ void newHandExtractor(cv::InputArray inImage_, cv::OutputArray outImage_, cv::Sc
 	// ローパスフィルタに使用するマスク画像
 	cv::Mat circleMask = cv::Mat::ones(dft_dst.size(), CV_8UC1) * 0;
 	cv::circle(circleMask, cv::Point(dft_dst.cols / 2, dft_dst.rows / 2), 120, cv::Scalar(255), -1, 4);
-	cv::circle(circleMask, cv::Point(dft_dst.cols / 2, dft_dst.rows / 2), 0.8, cv::Scalar(0), -1, 4);
+	//cv::circle(circleMask, cv::Point(dft_dst.cols / 2, dft_dst.rows / 2), 0.8, cv::Scalar(0), -1, 4);
 	dft_dst.copyTo(dft_dst_mask, circleMask);	// スペクトル画像に対して低周波フィルタリングを施した画像
 
 	// 撮影範囲外に手指領域が残るはずがないため，事前にカット
@@ -113,6 +118,39 @@ void newHandExtractor(cv::InputArray inImage_, cv::OutputArray outImage_, cv::Sc
 	bitwise_and(result_mask, hsv_mask, finalMask);	// 従来手法（HSVベース）と空間周波数フィルタリングでマスキング処理
 
 	finalMask.copyTo(outImage_);
+}
+
+void newHandExtractor(cv::InputArray inImage_, cv::OutputArray outImage_, cv::Scalar hsv_min, cv::Scalar hsv_max, double maskSize) {
+	cv::Mat inImage = inImage_.getMat();
+	cv::Mat hsvImage, hsv_mask, dft_dst, dft_dst_mask, spectreImg, mag_img, result, temp, result_mask, hsv_mask_org, finalMask;
+	handExtractor(inImage, hsv_mask, hsv_min, hsv_max);	// 従来手法に基づく手指領域のマスク画像を取得
+
+	// 入力画像にフーリエ変換
+	encodeImage(inImage, dft_dst);
+
+	// ローパスフィルタに使用するマスク画像
+	cv::Mat circleMask = cv::Mat::ones(dft_dst.size(), CV_8UC1) * 255;
+	//cv::circle(circleMask, cv::Point(dft_dst.cols / 2, dft_dst.rows / 2), 250, cv::Scalar(255), -1, 4);
+	cv::circle(circleMask, cv::Point(dft_dst.cols / 2, dft_dst.rows / 2), maskSize, cv::Scalar(0), -1, 4);
+	dft_dst.copyTo(dft_dst_mask, circleMask);	// スペクトル画像に対して低周波フィルタリングを施した画像
+
+	// 撮影範囲外に手指領域が残るはずがないため，事前にカット
+	cv::Mat DomeMask = cv::Mat::ones(dft_dst.size(), CV_32FC1) * 255;
+	cv::circle(DomeMask, cv::Point(dft_dst.cols / 2, dft_dst.rows / 2), 0, cv::Scalar(0), -1, 4);
+
+	// スペクトル画像を
+	//genMagImage();
+	// スペクトルから画像の復元
+	decodeImage(dft_dst_mask, result);
+	result.convertTo(temp, CV_32FC1);
+	//cv::threshold(temp, temp, 0.15, 255, cv::THRESH_BINARY);
+	cv::threshold(temp, temp, 0.15, 255, cv::THRESH_BINARY);
+	bitwise_and(temp, DomeMask, result_mask);
+	result_mask.convertTo(result_mask, CV_8UC1, 255);
+	cv::resize(result_mask, result_mask, hsv_mask.size(), cv::INTER_CUBIC);	// 512 -> 504に変更
+	bitwise_and(result_mask, hsv_mask, finalMask);	// 従来手法（HSVベース）と空間周波数フィルタリングでマスキング処理
+
+	result_mask.copyTo(outImage_);
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -243,4 +281,13 @@ void checkMatType(cv::InputArray inImage_) {
 		src_img.type() == CV_64FC4 ? "CV_64FC4" :	// 30
 		"other"
 		) << std::endl;
+}
+
+unsigned int getDigit(unsigned int num) {
+	unsigned digit = 0;
+	while (num != 0) {
+		num /= 10;
+		digit++;
+	}
+	return digit;
 }
