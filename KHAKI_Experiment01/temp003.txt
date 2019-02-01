@@ -1,0 +1,23 @@
+cv::Scalar hsv_min = cv::Scalar(0, 101, 60);
+	cv::Scalar hsv_max = cv::Scalar(16, 180, 225);
+	cv::Scalar hsv_Fourier_min = cv::Scalar(0, 0, 0);
+	cv::Scalar hsv_Fourier_max = cv::Scalar(179, 255, 255);
+
+	cv::Mat frame = cv::imread("data/resource/Image01(cvImg).jpg");
+	cv::Mat oldMethodImage, newMethodImage, maskImage;
+
+	const int digit = getDigit(frame.rows / 2 * 10 + 1);
+	for (int i = 0; i < frame.rows / 2 * 10 - 1; i++) {
+		double threshold = i /10;
+		handExtractor(frame, oldMethodImage, hsv_min, hsv_max);
+		newHandExtractor(frame, newMethodImage, maskImage, hsv_min, hsv_max, hsv_Fourier_min, hsv_Fourier_max, threshold);
+
+		std::ostringstream ss;
+		ss << std::setw(digit) << std::setfill('0') << i;
+		std::string num(ss.str());
+
+		std::string imgPass = "data/result/Fimages/image" + num + "(Mask).png";
+		cv::imwrite(imgPass, maskImage);
+	}
+
+	return 0;

@@ -5,8 +5,8 @@
 
 /* プロトタイプ宣言 */
 void handExtractor(cv::InputArray inImage_, cv::OutputArray outImage_, cv::Scalar hsv_min, cv::Scalar hsv_max);
-void newHandExtractor(cv::InputArray inImage_, cv::OutputArray outImage_, cv::Scalar hsv_min, cv::Scalar hsv_max);
-void newHandExtractor(cv::InputArray inImage_, cv::OutputArray outImage_, cv::Scalar hsv_min, cv::Scalar hsv_max, double maskSize);
+void newHandExtractor(cv::InputArray inImage_, cv::OutputArray outImage_, cv::OutputArray outMaskImage_, cv::Scalar hsv_min, cv::Scalar hsv_max, cv::Scalar hsv_Fourier_min, cv::Scalar hsv_Fourier_max);
+void newHandExtractor(cv::InputArray inImage_, cv::OutputArray outImage_, cv::OutputArray outMaskImage_, cv::Scalar hsv_min, cv::Scalar hsv_max, cv::Scalar hsv_Fourier_min, cv::Scalar hsv_Fourier_max, double maskSize);
 void shiftDft(cv::Mat &src, cv::Mat &dst);
 void encodeImage(cv::InputArray A_, cv::OutputArray dest_);
 void decodeImage(cv::InputArray A_, cv::OutputArray dest_);
@@ -16,9 +16,15 @@ unsigned int getDigit(unsigned int num);
 
 int main()
 {
+	// test_TK005.avi
 	/* 初期設定 */
-	cv::Scalar hsv_min = cv::Scalar( 0, 115, 100);
-	cv::Scalar hsv_max = cv::Scalar(15, 180, 225);
+	//cv::Scalar hsv_min = cv::Scalar(0, 101, 50);
+	//cv::Scalar hsv_max = cv::Scalar(15, 180, 255);
+	cv::Scalar hsv_min = cv::Scalar(0, 101, 20);
+	cv::Scalar hsv_max = cv::Scalar(18, 180, 225);
+
+	cv::Scalar hsv_Fourier_min = cv::Scalar(0, 0, 0);
+	cv::Scalar hsv_Fourier_max = cv::Scalar(179, 255, 255);
 
 	std::string inputstr;
 	std::cout << "入力とする.aviファイル（絶対パス）：";
@@ -48,18 +54,31 @@ int main()
 
 	const int digit = getDigit(frameCount);
 	/* 入力ファイルの総フレーム数だけ探索を繰り返す */
-	cv::Mat cvFImg;
-	cv::Mat frame = cv::imread("data/resource/RS_002.png");
-	for (int i = 0; i < 300; i++) {
-		newHandExtractor(frame, cvFImg, hsv_min, hsv_max, double(i / 10));	// 提案手法による手指領域の抽出
+	for (unsigned int i = 0; i < frameCount; i++) {
+		cv::Mat frame, oldMethodImage, newMethodImage, MaskImage;
+		video >> frame;	// 入力ファイルからフレーム画像を取得
+		handExtractor(frame, oldMethodImage, hsv_min, hsv_max);	// 従来手法による手指領域の抽出
+		int oldMethodZeroPixel = cv::countNonZero(oldMethodImage);
+		newHandExtractor(frame, newMethodImage, MaskImage, hsv_min, hsv_max, hsv_Fourier_min, hsv_Fourier_max);	// 提案手法による手指領域の抽出
+		int newMethodZeroPixel = cv::countNonZero(newMethodImage);
+
+		writing_file << oldMethodZeroPixel << "," << newMethodZeroPixel << "," << oldMethodZeroPixel - newMethodZeroPixel << std::endl;	// csvファイルに結果を出力する，
 
 		std::ostringstream ss;
-		ss << std::setw(4) << std::setfill('0') << i;
+		ss << std::setw(digit) << std::setfill('0') << i;
 		std::string num(ss.str());
 
-		std::string imgNewMethod = "data/result/Fimages/Fimage" + num + "(F_MaskSize).png";
-		cv::imwrite(imgNewMethod, cvFImg);
+		std::string imgOrg = "data/result/images/image" + num + "(Org).png";
+		cv::imwrite(imgOrg, frame);
+		std::string imgOldMethod = "data/result/images/image" + num + "(OldMethod).png";
+		cv::imwrite(imgOldMethod, oldMethodImage);
+		std::string imgNewMethod = "data/result/images/image" + num + "(NewMethod).png";
+		cv::imwrite(imgNewMethod, newMethodImage);
+		std::string imgMaskImage = "data/result/images/image" + num + "(MaskImage).png";
+		cv::imwrite(imgMaskImage, MaskImage);
 	}
+	std::cout << std::endl;
+	std::cout << "Finish!" << std::endl;
 
 	return 0;
 }
@@ -73,11 +92,14 @@ int main()
 void handExtractor(cv::InputArray inImage_, cv::OutputArray outImage_, cv::Scalar hsv_min, cv::Scalar hsv_max)
 {
 	cv::Mat inImage = inImage_.getMat();
-	cv::Mat hsvImage, hsv_mask, dstImage;
+	cv::Mat hsvImage, hsv_mask, dstImage, singlechannels[3];
 	cv::cvtColor(inImage, hsvImage, CV_BGR2HSV);
+
 	cv::inRange(hsvImage, hsv_min, hsv_max, hsv_mask);
+	
 	cv::morphologyEx(hsv_mask, hsv_mask, cv::MORPH_CLOSE, cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(5, 5)), cv::Point(-1, -1), 1);	// オープニング処理：内部ノイズの穴埋め
-	cv::morphologyEx(hsv_mask, hsv_mask, cv::MORPH_OPEN, cv::Mat(), cv::Point(-1, -1), 1);	// クロージング処理：ゴマ塩ノイズの除去
+	cv::morphologyEx(hsv_mask, hsv_mask, cv::MORPH_OPEN, cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(5, 5)), cv::Point(-1, -1), 1);	// クロージング処理：ゴマ塩ノイズの除去
+
 
 	hsv_mask.copyTo(outImage_);
 }
@@ -88,18 +110,19 @@ void handExtractor(cv::InputArray inImage_, cv::OutputArray outImage_, cv::Scala
 @param outImage_	抽出された手指領域の二値化画像
 @sa	Render
 **/
-void newHandExtractor(cv::InputArray inImage_, cv::OutputArray outImage_, cv::Scalar hsv_min, cv::Scalar hsv_max) {
+void newHandExtractor(cv::InputArray inImage_, cv::OutputArray outImage_, cv::OutputArray outMaskImage_, cv::Scalar hsv_min, cv::Scalar hsv_max, cv::Scalar hsv_Fourier_min, cv::Scalar hsv_Fourier_max) {
 	cv::Mat inImage = inImage_.getMat();
-	cv::Mat hsvImage, hsv_mask, dft_dst, dft_dst_mask, spectreImg, mag_img, result, temp, result_mask, hsv_mask_org, finalMask;
+	cv::Mat hsvImage, hsv_mask, hsv_Fourier_mask, dft_dst, dft_dst_mask, spectreImg, mag_img, result, temp, result_mask, hsv_mask_org, finalMask;
 	handExtractor(inImage, hsv_mask, hsv_min, hsv_max);	// 従来手法に基づく手指領域のマスク画像を取得
+	handExtractor(inImage, hsv_Fourier_mask, hsv_Fourier_min, hsv_Fourier_max);	// 従来手法に基づく手指領域のマスク画像を取得
 
 	// 入力画像にフーリエ変換
 	encodeImage(inImage, dft_dst);
 
 	// ローパスフィルタに使用するマスク画像
 	cv::Mat circleMask = cv::Mat::ones(dft_dst.size(), CV_8UC1) * 0;
-	cv::circle(circleMask, cv::Point(dft_dst.cols / 2, dft_dst.rows / 2), 120, cv::Scalar(255), -1, 4);
-	//cv::circle(circleMask, cv::Point(dft_dst.cols / 2, dft_dst.rows / 2), 0.8, cv::Scalar(0), -1, 4);
+	cv::circle(circleMask, cv::Point(dft_dst.cols / 2, dft_dst.rows / 2), 400, cv::Scalar(255), -1, 4);
+	cv::circle(circleMask, cv::Point(dft_dst.cols / 2, dft_dst.rows / 2), 0.5, cv::Scalar(0), -1, 4);
 	dft_dst.copyTo(dft_dst_mask, circleMask);	// スペクトル画像に対して低周波フィルタリングを施した画像
 
 	// 撮影範囲外に手指領域が残るはずがないため，事前にカット
@@ -115,23 +138,35 @@ void newHandExtractor(cv::InputArray inImage_, cv::OutputArray outImage_, cv::Sc
 	bitwise_and(temp, DomeMask, result_mask);
 	result_mask.convertTo(result_mask, CV_8UC1, 255);
 	cv::resize(result_mask, result_mask, hsv_mask.size(), cv::INTER_CUBIC);	// 512 -> 504に変更
+	bitwise_and(result_mask, hsv_Fourier_mask, result_mask);	// 従来手法（HSVベース）と空間周波数フィルタリングでマスキング処理
+
+	cv::morphologyEx(result_mask, result_mask, cv::MORPH_OPEN, cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(3, 3)), cv::Point(-1, -1), 1);	// クロージング処理：ゴマ塩ノイズの除去
+	cv::morphologyEx(result_mask, result_mask, cv::MORPH_CLOSE, cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(5, 5)), cv::Point(-1, -1), 1);	// オープニング処理：内部ノイズの穴埋め
+
+	result_mask.copyTo(outMaskImage_);
+
 	bitwise_and(result_mask, hsv_mask, finalMask);	// 従来手法（HSVベース）と空間周波数フィルタリングでマスキング処理
+
+	cv::morphologyEx(result_mask, result_mask, cv::MORPH_OPEN, cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(5, 5)), cv::Point(-1, -1), 2);	// クロージング処理：ゴマ塩ノイズの除去
+	cv::morphologyEx(result_mask, result_mask, cv::MORPH_CLOSE, cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(5, 5)), cv::Point(-1, -1), 1);	// オープニング処理：内部ノイズの穴埋め
 
 	finalMask.copyTo(outImage_);
 }
 
-void newHandExtractor(cv::InputArray inImage_, cv::OutputArray outImage_, cv::Scalar hsv_min, cv::Scalar hsv_max, double maskSize) {
+void newHandExtractor(cv::InputArray inImage_, cv::OutputArray outImage_, cv::OutputArray outMaskImage_, cv::Scalar hsv_min, cv::Scalar hsv_max, cv::Scalar hsv_Fourier_min, cv::Scalar hsv_Fourier_max, double maskSize) {
 	cv::Mat inImage = inImage_.getMat();
-	cv::Mat hsvImage, hsv_mask, dft_dst, dft_dst_mask, spectreImg, mag_img, result, temp, result_mask, hsv_mask_org, finalMask;
+	cv::resize(inImage, inImage, cv::Size(512, 512), cv::INTER_CUBIC);	// 504 -> 512に変更
+	cv::Mat hsvImage, hsv_mask, hsv_Fourier_mask, dft_dst, dft_dst_mask, spectreImg, mag_img, result, temp, result_mask, hsv_mask_org, finalMask;
 	handExtractor(inImage, hsv_mask, hsv_min, hsv_max);	// 従来手法に基づく手指領域のマスク画像を取得
+	handExtractor(inImage, hsv_Fourier_mask, hsv_Fourier_min, hsv_Fourier_max);	// 従来手法に基づく手指領域のマスク画像を取得
 
 	// 入力画像にフーリエ変換
 	encodeImage(inImage, dft_dst);
 
 	// ローパスフィルタに使用するマスク画像
-	cv::Mat circleMask = cv::Mat::ones(dft_dst.size(), CV_8UC1) * 255;
-	//cv::circle(circleMask, cv::Point(dft_dst.cols / 2, dft_dst.rows / 2), 250, cv::Scalar(255), -1, 4);
-	cv::circle(circleMask, cv::Point(dft_dst.cols / 2, dft_dst.rows / 2), maskSize, cv::Scalar(0), -1, 4);
+	cv::Mat circleMask = cv::Mat::ones(dft_dst.size(), CV_8UC1) * 0;
+	cv::circle(circleMask, cv::Point(dft_dst.cols / 2, dft_dst.rows / 2), maskSize, cv::Scalar(255), -1, 4);
+	cv::circle(circleMask, cv::Point(dft_dst.cols / 2, dft_dst.rows / 2), 0, cv::Scalar(0), -1, 4);
 	dft_dst.copyTo(dft_dst_mask, circleMask);	// スペクトル画像に対して低周波フィルタリングを施した画像
 
 	// 撮影範囲外に手指領域が残るはずがないため，事前にカット
@@ -143,14 +178,23 @@ void newHandExtractor(cv::InputArray inImage_, cv::OutputArray outImage_, cv::Sc
 	// スペクトルから画像の復元
 	decodeImage(dft_dst_mask, result);
 	result.convertTo(temp, CV_32FC1);
-	//cv::threshold(temp, temp, 0.15, 255, cv::THRESH_BINARY);
 	cv::threshold(temp, temp, 0.15, 255, cv::THRESH_BINARY);
 	bitwise_and(temp, DomeMask, result_mask);
 	result_mask.convertTo(result_mask, CV_8UC1, 255);
 	cv::resize(result_mask, result_mask, hsv_mask.size(), cv::INTER_CUBIC);	// 512 -> 504に変更
+	bitwise_and(result_mask, hsv_Fourier_mask, result_mask);	// 従来手法（HSVベース）と空間周波数フィルタリングでマスキング処理
+
+	cv::morphologyEx(result_mask, result_mask, cv::MORPH_OPEN, cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(3, 3)), cv::Point(-1, -1), 1);	// クロージング処理：ゴマ塩ノイズの除去
+	cv::morphologyEx(result_mask, result_mask, cv::MORPH_CLOSE, cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(5, 5)), cv::Point(-1, -1), 1);	// オープニング処理：内部ノイズの穴埋め
+
+	result_mask.copyTo(outMaskImage_);
+
 	bitwise_and(result_mask, hsv_mask, finalMask);	// 従来手法（HSVベース）と空間周波数フィルタリングでマスキング処理
 
-	result_mask.copyTo(outImage_);
+	cv::morphologyEx(result_mask, result_mask, cv::MORPH_OPEN, cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(3, 3)), cv::Point(-1, -1), 1);	// クロージング処理：ゴマ塩ノイズの除去
+	cv::morphologyEx(result_mask, result_mask, cv::MORPH_CLOSE, cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(5, 5)), cv::Point(-1, -1), 1);	// オープニング処理：内部ノイズの穴埋め
+
+	finalMask.copyTo(outImage_);
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////

@@ -1,55 +1,57 @@
-/* 初期設定 */
-	cv::Scalar hsv_min = cv::Scalar( 0, 115, 100);
+	/* 初期設定 */
+	//cv::Scalar hsv_min = cv::Scalar(15, 50, 25);
+	//cv::Scalar hsv_max = cv::Scalar(35, 80, 100);
+	cv::Scalar hsv_min = cv::Scalar(0, 115, 100);
 	cv::Scalar hsv_max = cv::Scalar(15, 180, 225);
+	//cv::Scalar hsv_min = cv::Scalar(0, 115, 100);
+	//cv::Scalar hsv_max = cv::Scalar(15, 255, 225);
 
-	std::string inputstr;
-	std::cout << "入力とする.aviファイル（絶対パス）：";
-	std::cin >> inputstr;
-	std::string inputFilePass = "data/resource/" + inputstr;
-	// 入力となる動画ファイルを入力
-	cv::VideoCapture video(inputFilePass);
-	if (!video.isOpened()) {
-		// 入力ファイルの読み込みに失敗した場合
-		std::cout << "入力ファイルの読み込みに失敗しました．" << std::endl;
-		return -1;
-	}
+	cv::Mat frame = cv::imread("data/resource/orgImage001(1008x1008).png");
+	cv::Mat oldMethodImage, newMethodImage, maskImage;
+	handExtractor(frame, oldMethodImage, hsv_min, hsv_max);	// 従来手法による手指領域の抽出
+	newHandExtractor(frame, newMethodImage, maskImage, hsv_min, hsv_max);	// 提案手法による手指領域の抽出
 
-	/* 入力ファイルのプロパティ */
-	const int Width = video.get(CV_CAP_PROP_FRAME_WIDTH);		// 幅
-	const int Heignt = video.get(CV_CAP_PROP_FRAME_HEIGHT);		// 高さ
-	const int frameCount = video.get(CV_CAP_PROP_FRAME_COUNT);	// 総フレーム数
+	std::string imgOrg = "data/result/images/image(Org).png";
+	cv::imwrite(imgOrg, frame);
+	std::string imgOldMethod = "data/result/images/image(OldMethod).png";
+	cv::imwrite(imgOldMethod, oldMethodImage);
+	std::string imgNewMethod = "data/result/images/image(NewMethod).png";
+	cv::imwrite(imgNewMethod, newMethodImage);
 
-	std::string inputLog;
-	std::cout << "出力ログのファイル名：";
-	std::cin >> inputLog;
-	std::string filename = "data/result/" + inputLog;
-	std::ofstream writing_file;
-	writing_file.open(filename, std::ios::out);
-	writing_file << "従来手法の総ピクセル数,提案手法の総ピクセル数,従来手法の総ピクセル数-提案手法の総ピクセル数" << std::endl;
-	std::cout << "writing " << filename << "..." << std::endl;
-
-	const int digit = getDigit(frameCount);
-	/* 入力ファイルの総フレーム数だけ探索を繰り返す */
-	for (unsigned int i = 0; i < frameCount; i++) {
-		cv::Mat frame, oldMethodImage, newMethodImage;
-		video >> frame;	// 入力ファイルからフレーム画像を取得
-		handExtractor(frame, oldMethodImage, hsv_min, hsv_max);	// 従来手法による手指領域の抽出
-		int oldMethodZeroPixel = cv::countNonZero(oldMethodImage);
-		newHandExtractor(frame, newMethodImage, hsv_min, hsv_max);	// 提案手法による手指領域の抽出
-		int newMethodZeroPixel = cv::countNonZero(newMethodImage);
-
-		writing_file << oldMethodZeroPixel << "," << newMethodZeroPixel << "," << oldMethodZeroPixel - newMethodZeroPixel << std::endl;	// csvファイルに結果を出力する，
-
-		std::ostringstream ss;
-		ss << std::setw(digit) << std::setfill('0') << i;
-		std::string num(ss.str());
-
-		std::string imgOrg = "data/result/images/image" + num + "(Org).png";
-		cv::imwrite(imgOrg, frame);
-		std::string imgOldMethod = "data/result/images/image" + num + "(OldMethod).png";
-		cv::imwrite(imgOldMethod, oldMethodImage);
-		std::string imgNewMethod = "data/result/images/image" + num + "(NewMethod).png";
-		cv::imwrite(imgNewMethod, newMethodImage);
-	}
+	std::cout << std::endl;
+	std::cout << "Finish!" << std::endl;
 
 	return 0;
+
+
+
+
+	/////////////////////////////////////////////////////////////////////////////////////////////////
+	// H,S,Vの各成分に分離する
+	cv::split(hsvImage, singlechannels);
+
+	/* Hue成分のマスク画像 */
+	cv::Mat h1, h2, hue, hue2;
+	cv::threshold(singlechannels[0], h1, hsv_min[0], 255, cv::THRESH_BINARY);
+	cv::threshold(singlechannels[0], h2, hsv_max[0], 255, cv::THRESH_BINARY_INV);
+	cv::bitwise_and(h1, h2, hue);
+	//cv::bitwise_not(hue, hue);
+
+	/* Satration成分のマスク画像 */
+	cv::Mat s1, s2, sat, sat2;
+	cv::threshold(singlechannels[1], s1, hsv_min[1], 255, cv::THRESH_BINARY);
+	cv::threshold(singlechannels[1], s2, hsv_max[1], 255, cv::THRESH_BINARY_INV);
+	cv::bitwise_and(s1, s2, sat);
+
+	/* Value成分のマスク画像 */
+	cv::Mat v1, v2, val, val2;
+	cv::threshold(singlechannels[2], v1, hsv_min[2], 255, cv::THRESH_BINARY);
+	cv::threshold(singlechannels[2], v2, hsv_max[2], 255, cv::THRESH_BINARY_INV);
+	cv::bitwise_and(v1, v2, val);
+
+	/* 各成分の合成 */
+	cv::bitwise_and(hue, sat, hsv_mask);
+	cv::bitwise_and(hsv_mask, val, hsv_mask);
+	hsv_mask.convertTo(hsv_mask, CV_8UC1, 255);
+	cv::morphologyEx(hsv_mask, hsv_mask, cv::MORPH_CLOSE, cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(5, 5)), cv::Point(-1, -1), 1);	// オープニング処理：内部ノイズの穴埋め
+	cv::morphologyEx(hsv_mask, hsv_mask, cv::MORPH_OPEN, cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(5, 5)), cv::Point(-1, -1), 1);	// クロージング処理：ゴマ塩ノイズの除去

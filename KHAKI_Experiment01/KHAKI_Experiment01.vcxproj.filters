@@ -31,5 +31,11 @@
     <Text Include="temp.txt">
       <Filter>リソース ファイル</Filter>
     </Text>
+    <Text Include="temp002.txt">
+      <Filter>リソース ファイル</Filter>
+    </Text>
+    <Text Include="temp003.txt">
+      <Filter>リソース ファイル</Filter>
+    </Text>
   </ItemGroup>
 </Project>
