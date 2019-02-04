@@ -1,15 +1,18 @@
 	/* 初期設定 */
-	//cv::Scalar hsv_min = cv::Scalar(15, 50, 25);
-	//cv::Scalar hsv_max = cv::Scalar(35, 80, 100);
-	cv::Scalar hsv_min = cv::Scalar(0, 115, 100);
-	cv::Scalar hsv_max = cv::Scalar(15, 180, 225);
-	//cv::Scalar hsv_min = cv::Scalar(0, 115, 100);
-	//cv::Scalar hsv_max = cv::Scalar(15, 255, 225);
+	//cv::Scalar hsv_min = cv::Scalar(0, 101, 50);
+	//cv::Scalar hsv_max = cv::Scalar(15, 180, 255);
+	cv::Scalar hsv_min = cv::Scalar(0, 101, 50);
+	cv::Scalar hsv_max = cv::Scalar(17, 180, 255);
+	cv::Scalar hsv_Fourier_min = cv::Scalar(0, 0, 0);
+	cv::Scalar hsv_Fourier_max = cv::Scalar(179, 255, 255);
 
-	cv::Mat frame = cv::imread("data/resource/orgImage001(1008x1008).png");
-	cv::Mat oldMethodImage, newMethodImage, maskImage;
+	cv::Mat frame = cv::imread("data/resource/RS_001.png");
+	cv::Mat oldMethodImage, newMethodImage, MaskImage;
+
 	handExtractor(frame, oldMethodImage, hsv_min, hsv_max);	// 従来手法による手指領域の抽出
-	newHandExtractor(frame, newMethodImage, maskImage, hsv_min, hsv_max);	// 提案手法による手指領域の抽出
+	int oldMethodZeroPixel = cv::countNonZero(oldMethodImage);
+	newHandExtractor(frame, newMethodImage, MaskImage, hsv_min, hsv_max, hsv_Fourier_min, hsv_Fourier_max);	// 提案手法による手指領域の抽出
+	int newMethodZeroPixel = cv::countNonZero(newMethodImage);
 
 	std::string imgOrg = "data/result/images/image(Org).png";
 	cv::imwrite(imgOrg, frame);
@@ -17,13 +20,10 @@
 	cv::imwrite(imgOldMethod, oldMethodImage);
 	std::string imgNewMethod = "data/result/images/image(NewMethod).png";
 	cv::imwrite(imgNewMethod, newMethodImage);
-
-	std::cout << std::endl;
-	std::cout << "Finish!" << std::endl;
+	std::string imgMaskImage = "data/result/images/image(MaskImage).png";
+	cv::imwrite(imgMaskImage, MaskImage);
 
 	return 0;
-
-
 
 
 	/////////////////////////////////////////////////////////////////////////////////////////////////

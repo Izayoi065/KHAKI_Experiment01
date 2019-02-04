@@ -20,8 +20,8 @@ int main()
 	/* 初期設定 */
 	//cv::Scalar hsv_min = cv::Scalar(0, 101, 50);
 	//cv::Scalar hsv_max = cv::Scalar(15, 180, 255);
-	cv::Scalar hsv_min = cv::Scalar(0, 101, 20);
-	cv::Scalar hsv_max = cv::Scalar(18, 180, 225);
+	cv::Scalar hsv_min = cv::Scalar(0, 101, 50);
+	cv::Scalar hsv_max = cv::Scalar(15, 180, 255);
 
 	cv::Scalar hsv_Fourier_min = cv::Scalar(0, 0, 0);
 	cv::Scalar hsv_Fourier_max = cv::Scalar(179, 255, 255);
@@ -112,42 +112,58 @@ void handExtractor(cv::InputArray inImage_, cv::OutputArray outImage_, cv::Scala
 **/
 void newHandExtractor(cv::InputArray inImage_, cv::OutputArray outImage_, cv::OutputArray outMaskImage_, cv::Scalar hsv_min, cv::Scalar hsv_max, cv::Scalar hsv_Fourier_min, cv::Scalar hsv_Fourier_max) {
 	cv::Mat inImage = inImage_.getMat();
-	cv::Mat hsvImage, hsv_mask, hsv_Fourier_mask, dft_dst, dft_dst_mask, spectreImg, mag_img, result, temp, result_mask, hsv_mask_org, finalMask;
+	cv::Mat hsvImage, hsv_mask, hsv_Fourier_mask, dft_dst, dft_dst_mask, spectreImg, mag_img, result, temp, result_mask, hsv_mask_org, finalMask, tempImage;
 	handExtractor(inImage, hsv_mask, hsv_min, hsv_max);	// 従来手法に基づく手指領域のマスク画像を取得
-	handExtractor(inImage, hsv_Fourier_mask, hsv_Fourier_min, hsv_Fourier_max);	// 従来手法に基づく手指領域のマスク画像を取得
+	//handExtractor(inImage, hsv_Fourier_mask, hsv_Fourier_min, hsv_Fourier_max);	// 従来手法に基づく手指領域のマスク画像を取得
 
 	// 入力画像にフーリエ変換
 	encodeImage(inImage, dft_dst);
 
+	// スペクトル画像を保存
+	genMagImage(dft_dst, tempImage);
+	tempImage.convertTo(tempImage, CV_32FC3, 255);	// スケーリング処理	0-1→0-255
+	std::string fourierSpecImage = "data/result/images/image(FourSpec).png";
+	//cv::imwrite(fourierSpecImage, tempImage);
+
 	// ローパスフィルタに使用するマスク画像
 	cv::Mat circleMask = cv::Mat::ones(dft_dst.size(), CV_8UC1) * 0;
 	cv::circle(circleMask, cv::Point(dft_dst.cols / 2, dft_dst.rows / 2), 400, cv::Scalar(255), -1, 4);
-	cv::circle(circleMask, cv::Point(dft_dst.cols / 2, dft_dst.rows / 2), 0.5, cv::Scalar(0), -1, 4);
+	cv::circle(circleMask, cv::Point((dft_dst.cols / 2), (dft_dst.rows / 2)), 0.5, cv::Scalar(0), -1, 4);
 	dft_dst.copyTo(dft_dst_mask, circleMask);	// スペクトル画像に対して低周波フィルタリングを施した画像
 
-	// 撮影範囲外に手指領域が残るはずがないため，事前にカット
-	cv::Mat DomeMask = cv::Mat::ones(dft_dst.size(), CV_32FC1) * 255;
-	cv::circle(DomeMask, cv::Point(dft_dst.cols / 2, dft_dst.rows / 2), 0, cv::Scalar(0), -1, 4);
+	// フィルタ通過後のスペクトル画像を保存
+	genMagImage(dft_dst_mask, tempImage);
+	tempImage.convertTo(tempImage, CV_32FC3, 255);	// スケーリング処理	0-1→0-255
+	std::string fourierMagSpecImage = "data/result/images/image(FourMagSpec).png";
+	//cv::imwrite(fourierMagSpecImage, tempImage);
 
-	// スペクトル画像を
-	//genMagImage();
+	// 撮影範囲外に手指領域が残るはずがないため，事前にカット
+	//cv::Mat DomeMask = cv::Mat::ones(dft_dst.size(), CV_32FC1) * 255;
+	//cv::circle(DomeMask, cv::Point(dft_dst.cols / 2, dft_dst.rows / 2), 0, cv::Scalar(0), -1, 4);
+
 	// スペクトルから画像の復元
 	decodeImage(dft_dst_mask, result);
 	result.convertTo(temp, CV_32FC1);
-	cv::threshold(temp, temp, 0.15, 255, cv::THRESH_BINARY);
-	bitwise_and(temp, DomeMask, result_mask);
+	std::string decodeImage = "data/result/images/image(decoded).png";
+	temp.convertTo(tempImage, CV_32FC3, 255);	// スケーリング処理	0-1→0-255
+	//cv::imwrite(decodeImage, tempImage);
+	cv::threshold(temp, result_mask, 0.15, 255, cv::THRESH_BINARY);
+	//bitwise_and(temp, DomeMask, result_mask);
 	result_mask.convertTo(result_mask, CV_8UC1, 255);
 	cv::resize(result_mask, result_mask, hsv_mask.size(), cv::INTER_CUBIC);	// 512 -> 504に変更
-	bitwise_and(result_mask, hsv_Fourier_mask, result_mask);	// 従来手法（HSVベース）と空間周波数フィルタリングでマスキング処理
+	cv::threshold(result_mask, result_mask, 250, 255, cv::THRESH_BINARY);
+	//bitwise_and(result_mask, hsv_Fourier_mask, result_mask);	// 従来手法（HSVベース）と空間周波数フィルタリングでマスキング処理
 
-	cv::morphologyEx(result_mask, result_mask, cv::MORPH_OPEN, cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(3, 3)), cv::Point(-1, -1), 1);	// クロージング処理：ゴマ塩ノイズの除去
+	cv::morphologyEx(result_mask, result_mask, cv::MORPH_OPEN, cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(5, 5)), cv::Point(-1, -1), 1);	// クロージング処理：ゴマ塩ノイズの除去
 	cv::morphologyEx(result_mask, result_mask, cv::MORPH_CLOSE, cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(5, 5)), cv::Point(-1, -1), 1);	// オープニング処理：内部ノイズの穴埋め
 
+	cv::Mat affineMat = (cv::Mat_<double>(2, 3) << 1.0, 0.0, 3, 0.0, 1.0, 3);
+	cv::warpAffine(result_mask, result_mask, affineMat, result_mask.size(), CV_INTER_LINEAR, cv::BORDER_TRANSPARENT);
 	result_mask.copyTo(outMaskImage_);
 
 	bitwise_and(result_mask, hsv_mask, finalMask);	// 従来手法（HSVベース）と空間周波数フィルタリングでマスキング処理
 
-	cv::morphologyEx(result_mask, result_mask, cv::MORPH_OPEN, cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(5, 5)), cv::Point(-1, -1), 2);	// クロージング処理：ゴマ塩ノイズの除去
+	cv::morphologyEx(result_mask, result_mask, cv::MORPH_OPEN, cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(5, 5)), cv::Point(-1, -1), 3);	// クロージング処理：ゴマ塩ノイズの除去
 	cv::morphologyEx(result_mask, result_mask, cv::MORPH_CLOSE, cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(5, 5)), cv::Point(-1, -1), 1);	// オープニング処理：内部ノイズの穴埋め
 
 	finalMask.copyTo(outImage_);
@@ -158,7 +174,7 @@ void newHandExtractor(cv::InputArray inImage_, cv::OutputArray outImage_, cv::Ou
 	cv::resize(inImage, inImage, cv::Size(512, 512), cv::INTER_CUBIC);	// 504 -> 512に変更
 	cv::Mat hsvImage, hsv_mask, hsv_Fourier_mask, dft_dst, dft_dst_mask, spectreImg, mag_img, result, temp, result_mask, hsv_mask_org, finalMask;
 	handExtractor(inImage, hsv_mask, hsv_min, hsv_max);	// 従来手法に基づく手指領域のマスク画像を取得
-	handExtractor(inImage, hsv_Fourier_mask, hsv_Fourier_min, hsv_Fourier_max);	// 従来手法に基づく手指領域のマスク画像を取得
+	//handExtractor(inImage, hsv_Fourier_mask, hsv_Fourier_min, hsv_Fourier_max);	// 従来手法に基づく手指領域のマスク画像を取得
 
 	// 入力画像にフーリエ変換
 	encodeImage(inImage, dft_dst);
@@ -182,7 +198,7 @@ void newHandExtractor(cv::InputArray inImage_, cv::OutputArray outImage_, cv::Ou
 	bitwise_and(temp, DomeMask, result_mask);
 	result_mask.convertTo(result_mask, CV_8UC1, 255);
 	cv::resize(result_mask, result_mask, hsv_mask.size(), cv::INTER_CUBIC);	// 512 -> 504に変更
-	bitwise_and(result_mask, hsv_Fourier_mask, result_mask);	// 従来手法（HSVベース）と空間周波数フィルタリングでマスキング処理
+	//bitwise_and(result_mask, hsv_Fourier_mask, result_mask);	// 従来手法（HSVベース）と空間周波数フィルタリングでマスキング処理
 
 	cv::morphologyEx(result_mask, result_mask, cv::MORPH_OPEN, cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(3, 3)), cv::Point(-1, -1), 1);	// クロージング処理：ゴマ塩ノイズの除去
 	cv::morphologyEx(result_mask, result_mask, cv::MORPH_CLOSE, cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(5, 5)), cv::Point(-1, -1), 1);	// オープニング処理：内部ノイズの穴埋め

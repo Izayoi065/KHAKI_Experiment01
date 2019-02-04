@@ -2,8 +2,8 @@
 	/* èâä˙ê›íË */
 	//cv::Scalar hsv_min = cv::Scalar(0, 101, 50);
 	//cv::Scalar hsv_max = cv::Scalar(15, 180, 255);
-	cv::Scalar hsv_min = cv::Scalar(0, 101, 60);
-	cv::Scalar hsv_max = cv::Scalar(16, 180, 225);
+	cv::Scalar hsv_min = cv::Scalar(0, 101, 30);
+	cv::Scalar hsv_max = cv::Scalar(18, 180, 255);
 
 	cv::Scalar hsv_Fourier_min = cv::Scalar(0, 0, 0);
 	cv::Scalar hsv_Fourier_max = cv::Scalar(179, 255, 255);
